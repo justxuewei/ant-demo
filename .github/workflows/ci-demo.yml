@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'release-*'
+      - 'feature-*'
+  pull_request:
+    branches: "*"
+
+permissions:
+  contents: read
+
+jobs:
+  format-code:
+    name: format-code-on-ubuntu-latest-go-1.20
+    runs-on: ubuntu-latest
+    steps:
+    - name: Setup Go 1.20
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.20
+      id: go
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Set Git config
+      run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "Github Actions"
+    - name: Merge code back to upstream
+      if: ${{ github.event_name == 'pull_request' }}
+      run: |
+          git fetch origin $GITHUB_BASE_REF
+          git checkout -b $GITHUB_BASE_REF origin/$GITHUB_BASE_REF
+          git remote add prorigin https://github.com/${{github.event.pull_request.head.repo.full_name}}.git
+          git fetch prorigin ${{github.event.pull_request.head.sha}}
+          git merge ${{github.event.pull_request.head.sha}}
+    - name: Install dependencies
+      run: |
+        if [ -f Gopkg.toml ]; then
+            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+            dep ensure
+        else
+            go get -v -t -d ./...
+        fi
+    - name: Format code
+      run: |
+        go fmt ./... && git status && [[ -z `git status -s` ]]
